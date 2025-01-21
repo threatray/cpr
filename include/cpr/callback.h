@@ -4,6 +4,7 @@
 #include "cprtypes.h"
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <utility>

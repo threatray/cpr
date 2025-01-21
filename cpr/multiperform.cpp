@@ -9,8 +9,8 @@
 #include <cassert>
 #include <cstddef>
 #include <curl/curl.h>
-#include <curl/multi.h>
 #include <curl/curlver.h>
+#include <curl/multi.h>
 #include <functional>
 #include <iosfwd>
 #include <iostream>
@@ -68,14 +68,19 @@ void MultiPerform::AddSession(std::shared_ptr<Session>& session, HttpMethod meth
 }
 
 void MultiPerform::RemoveSession(const std::shared_ptr<Session>& session) {
+    // Has to be handled before calling curl_multi_remove_handle to avoid it returning something != CURLM_OK.
+    if (sessions_.empty()) {
+        throw std::invalid_argument("Failed to find session!");
+    }
+
     // Remove easy handle from multihandle
     const CURLMcode error_code = curl_multi_remove_handle(multicurl_->handle, session->curl_->handle);
-    if (error_code) {
+    if (error_code != CURLM_OK) {
         std::cerr << "curl_multi_remove_handle() failed, code " << static_cast<int>(error_code) << '\n';
         return;
     }
 
-    // Unock session
+    // Unlock session
     session->isUsedInMultiPerform = false;
 
     // Remove session from sessions_
@@ -157,7 +162,7 @@ std::vector<Response> MultiPerform::ReadMultiInfo(const std::function<Response(S
     for (const std::pair<std::shared_ptr<Session>, HttpMethod>& pair : sessions_) {
         Session& current_session = *(pair.first);
         auto it = std::find_if(responses.begin(), responses.end(), [&current_session](const Response& response) { return current_session.curl_->handle == response.curl_->handle; });
-        const Response current_response = *it;
+        const Response current_response = *it; // NOLINT (performance-unnecessary-copy-initialization) False possible
         // Erase response from original vector to increase future search speed
         responses.erase(it);
         sorted_responses.push_back(current_response);

@@ -1,4 +1,5 @@
 #include "cpr/threadpool.h"
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <ctime>
@@ -20,12 +21,7 @@ int ThreadPool::Start(size_t start_threads) {
         return -1;
     }
     status = RUNNING;
-    if (start_threads < min_thread_num) {
-        start_threads = min_thread_num;
-    }
-    if (start_threads > max_thread_num) {
-        start_threads = max_thread_num;
-    }
+    start_threads = std::clamp(start_threads, min_thread_num, max_thread_num);
     for (size_t i = 0; i < start_threads; ++i) {
         CreateThread();
     }
@@ -132,14 +128,15 @@ void ThreadPool::AddThread(std::thread* thread) {
     data.thread = std::shared_ptr<std::thread>(thread);
     data.id = thread->get_id();
     data.status = RUNNING;
-    data.start_time = time(nullptr);
-    data.stop_time = 0;
+    data.start_time = std::chrono::steady_clock::now();
+    data.stop_time = std::chrono::steady_clock::time_point::max();
     threads.emplace_back(data);
     thread_mutex.unlock();
 }
 
 void ThreadPool::DelThread(std::thread::id id) {
-    const time_t now = time(nullptr);
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+
     thread_mutex.lock();
     --cur_thread_num;
     --idle_thread_num;
@@ -153,7 +150,7 @@ void ThreadPool::DelThread(std::thread::id id) {
             }
         } else if (iter->id == id) {
             iter->status = STOP;
-            iter->stop_time = time(nullptr);
+            iter->stop_time = std::chrono::steady_clock::now();
         }
         ++iter;
     }
